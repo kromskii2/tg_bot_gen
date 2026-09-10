@@ -1,0 +1,25 @@
+{
+  "name": "tg_bot_gen",
+  "version": "1.0.0",
+  "description": "Telegram bot: генератор паролей с инлайн-меню",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "password",
+    "generator"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "telegraf": "^4.16.3"
+  }
+}
