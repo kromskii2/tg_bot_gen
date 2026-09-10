@@ -1,0 +1,11 @@
+node_modules
+.git
+.github
+.env
+.env.example
+bot.log
+out.log
+Dockerfile
+.dockerignore
+README.md
+tests

@@ -35,3 +35,26 @@ OWNER_ID=ваш_user_id
 index.js            # бот: меню, хэндлеры кнопок
 lib/generator.js    # генератор + оценка энтропии
 ```
+
+## Docker / CI-CD
+
+✅ GitHub Actions: `.github/workflows/docker.yml` — при пуше в `main`, PR и теге `v*`:
+1. **test** — `node --check` + смоук-тесты генератора (`npm test`)
+2. **build** — сборка образа и публикация в GHCR: `ghcr.io/kromskii2/tg_bot_gen` (теги `latest`, `main`, `sha-xxx`, semver для тегов)
+
+Локально:
+
+```bash
+npm test                 # проверки
+docker build -t tg_bot_gen .   # или npm run docker
+docker run --env-file .env tg_bot_gen
+# или:
+docker compose up -d --build
+```
+
+Запуск собранного в CI образа:
+
+```bash
+docker run -d --name tg_bot_gen --env-file .env ghcr.io/kromskii2/tg_bot_gen:latest
+```
+(для private-репозитория: `docker login ghcr.io` с PAT со scope `read:packages`)

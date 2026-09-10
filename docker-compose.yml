@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    image: ghcr.io/kromskii2/tg_bot_gen:latest
+    env_file: .env
+    restart: unless-stopped
+    # long polling — порты наружу не нужны
