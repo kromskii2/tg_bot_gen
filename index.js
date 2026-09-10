@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 import { Telegraf, Markup } from 'telegraf';
-import { generatePassword, strength } from './lib/generator.js';
+import { generatePassword, strength, generateEmail, EMAIL_DOMAINS } from './lib/generator.js';
 
 const boot = (m) =>
   fs.appendFileSync(
@@ -28,6 +28,9 @@ const defaults = () => ({
   symbols: true,
   excludeAmbiguous: false,
   pronounceable: false,
+  emailStyle: 0,
+  emailDomain: 0,
+  emailNumber: true,
 });
 const users = new Map();
 const history = new Map(); // userId -> [passwords]
@@ -49,6 +52,7 @@ const mainMenu = () =>
   Markup.inlineKeyboard([
     [Markup.button.callback('🔑 Сгенерировать пароль', 'gen')],
     [Markup.button.callback('🎰 Пачка из 5', 'gen5')],
+    [Markup.button.callback('📧 Почтовый адрес', 'email')],
     [Markup.button.callback('⚙️ Настройки', 'settings')],
     [Markup.button.callback('📋 История', 'history')],
     [Markup.button.callback('ℹ️ О боте', 'about')],
@@ -107,6 +111,39 @@ const passwordText = (pwd, s) => {
   ].join('\n');
 };
 
+const EMAIL_STYLES = ['random (psxaiq)', 'pronounceable (sevemafi)', 'wordnum (nova.turbo86)'];
+const EMAIL_STYLE_KEYS = ['random', 'pronounceable', 'wordnum'];
+
+const emailKb = (s) =>
+  Markup.inlineKeyboard([
+    [Markup.button.callback('🔁 Ещё раз', 'email'), Markup.button.callback('🎰 Пачка из 5', 'email5')],
+    [
+      Markup.button.callback('◀️', 'edom:-1'),
+      Markup.button.callback('🌐 ' + EMAIL_DOMAINS[s.emailDomain], 'noop'),
+      Markup.button.callback('▶️', 'edom:+1'),
+    ],
+    [Markup.button.callback('🎨 Стиль: ' + EMAIL_STYLES[s.emailStyle], 'estyle')],
+    [
+      Markup.button.callback((s.emailNumber ? '✅' : '❎') + ' Цифра в адресе', 'enum'),
+      Markup.button.callback('⬅️ Меню', 'main'),
+    ],
+  ]);
+
+const emailText = (mail, s) =>
+  '📧 Почтовый адрес:\n\n' +
+    BT2(mail) +
+    '\n\n🎨 Стиль: ' + EMAIL_STYLES[s.emailStyle] + '\n' +
+    '🌐 Домен: ' + EMAIL_DOMAINS[s.emailDomain] + '\n\n' +
+    '🛡 crypto.randomInt — нажми на адрес, чтобы скопировать.';
+const BT2 = (x) => "`" + x + "`" + '\n\n';
+
+const makeEmail = (s) =>
+  generateEmail({
+    style: EMAIL_STYLE_KEYS[s.emailStyle] || 'random',
+    domain: EMAIL_DOMAINS[s.emailDomain],
+    withNumber: s.emailNumber,
+    length: Math.max(6, Math.min(s.length, 20)),
+  });
 /* ---------- Shared actions ---------- */
 const sendPassword = async (ctx, s) => {
   const pwd = generatePassword(s);
@@ -211,6 +248,63 @@ bot.action('gen5', async (ctx) => {
     .catch(() => {});
 });
 
+bot.action('email', (ctx) => {
+  const s = state(ctx.from.id);
+  const mail = makeEmail(s);
+  addHistory(ctx.from.id, '📧 ' + mail);
+  return ctx
+    .replyWithMarkdown(emailText(mail, s), emailKb(s))
+    .then(() => ctx.answerCbQuery())
+    .catch(() => {});
+});
+
+bot.action('email5', (ctx) => {
+  const s = state(ctx.from.id);
+  const rows = [];
+  for (let i = 0; i < 5; i++) {
+    const mail = makeEmail(s);
+    addHistory(ctx.from.id, '📧 ' + mail);
+    rows.push(i + 1 + '. ' + BT + mail + BT);
+  }
+  return ctx
+    .replyWithMarkdown(
+      '🎰 Пачка из 5 адресов (' + EMAIL_DOMAINS[s.emailDomain] + ', ' + EMAIL_STYLES[s.emailStyle] + '):\n\n' + rows.join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔁 Ещё пачку', 'email5')],
+        [Markup.button.callback('⬅️ Назад', 'email'), Markup.button.callback('🏠 Меню', 'main')],
+      ])
+    )
+    .then(() => ctx.answerCbQuery())
+    .catch(() => {});
+});
+
+bot.action(/^edom:(-?\d+)$/, (ctx) => {
+  const delta = Number(ctx.match[1]);
+  const s = state(ctx.from.id);
+  s.emailDomain = (s.emailDomain + delta + EMAIL_DOMAINS.length) % EMAIL_DOMAINS.length;
+  return ctx
+    .editMessageText('📧 Настройки адреса — жми «Ещё раз»:', emailKb(s))
+    .then(() => ctx.answerCbQuery(EMAIL_DOMAINS[s.emailDomain]))
+    .catch(() => {});
+});
+
+bot.action('estyle', (ctx) => {
+  const s = state(ctx.from.id);
+  s.emailStyle = (s.emailStyle + 1) % EMAIL_STYLES.length;
+  return ctx
+    .editMessageText('📧 Настройки адреса — жми «Ещё раз»:', emailKb(s))
+    .then(() => ctx.answerCbQuery(EMAIL_STYLES[s.emailStyle]))
+    .catch(() => {});
+});
+
+bot.action('enum', (ctx) => {
+  const s = state(ctx.from.id);
+  s.emailNumber = !s.emailNumber;
+  return ctx
+    .editMessageText('📧 Настройки адреса — жми «Ещё раз»:', emailKb(s))
+    .then(() => ctx.answerCbQuery())
+    .catch(() => {});
+});
 bot.action('history', (ctx) => {
   const h = history.get(ctx.from.id) || [];
   const text = h.length
@@ -242,6 +336,7 @@ bot.action('about', (ctx) =>
         '📏 Длина 4–128 символов.\n' +
         '🔤 Наборы: A-Z, a-z, 0-9, символы; опции «без похожих» и «произносимый».\n' +
         '📊 Оценка стойкости в битах энтропии.\n' +
+        '📧 Почтовые адреса: 3 стиля, 14 доменов (gmail, mail.ru, yandex, proton…).\n' +
         '🔒 Пароли не отправляются на серверы и не сохраняются на диске.',
       backKb()
     )
@@ -265,6 +360,13 @@ bot.command('gen', (ctx) => {
   return sendPassword(ctx, s).catch(() => {});
 });
 
+bot.command('email', (ctx) => {
+  const s = state(ctx.from.id);
+  const mail = makeEmail(s);
+  addHistory(ctx.from.id, '📧 ' + mail);
+  return ctx.replyWithMarkdown(emailText(mail, s), emailKb(s)).catch(() => {});
+});
+
 bot.on('text', (ctx) => ctx.reply('Используй /start 🙂', mainMenu()));
 
 bot.catch((err) => {
@@ -277,6 +379,7 @@ bot.catch((err) => {
 const COMMANDS = [
   { command: 'start', description: 'Главное меню' },
   { command: 'gen', description: 'Сгенерировать пароль (/gen 24)' },
+  { command: 'email', description: 'Сгенерировать почтовый адрес' },
   { command: 'help', description: 'Справка' },
 ];
 
